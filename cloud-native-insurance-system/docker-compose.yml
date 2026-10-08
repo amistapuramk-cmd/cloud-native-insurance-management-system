@@ -1,0 +1,25 @@
+services:
+  customer-service:
+    build: ./customer-service
+    environment: { PORT: 3000 }
+  policy-service:
+    build: ./policy-service
+    environment:
+      PORT: 3000
+      CUSTOMER_SERVICE_URL: http://customer-service:3000
+    depends_on: [customer-service]
+  claim-service:
+    build: ./claim-service
+    environment:
+      PORT: 3000
+      POLICY_SERVICE_URL: http://policy-service:3000
+    depends_on: [policy-service]
+  api-gateway:
+    build: ./api-gateway
+    ports: ["8080:3000"]
+    environment:
+      PORT: 3000
+      CUSTOMER_SERVICE_URL: http://customer-service:3000
+      POLICY_SERVICE_URL: http://policy-service:3000
+      CLAIM_SERVICE_URL: http://claim-service:3000
+    depends_on: [customer-service, policy-service, claim-service]

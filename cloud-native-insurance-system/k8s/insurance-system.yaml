@@ -1,0 +1,168 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: customer-service }
+  template:
+    metadata:
+      labels: { app: customer-service }
+    spec:
+      containers:
+      - name: customer-service
+        image: insurance/customer-service:1.0
+        ports: [{ containerPort: 3000 }]
+        env:
+        - { name: PORT, value: "3000" }
+        readinessProbe:
+          httpGet: { path: /health, port: 3000 }
+          initialDelaySeconds: 3
+        livenessProbe:
+          httpGet: { path: /health, port: 3000 }
+          initialDelaySeconds: 10
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-service
+spec:
+  type: ClusterIP
+  selector: { app: customer-service }
+  ports:
+  - { port: 80, targetPort: 3000 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: policy-service }
+  template:
+    metadata:
+      labels: { app: policy-service }
+    spec:
+      containers:
+      - name: policy-service
+        image: insurance/policy-service:1.0
+        ports: [{ containerPort: 3000 }]
+        env:
+        - { name: PORT, value: "3000" }
+        - { name: CUSTOMER_SERVICE_URL, value: "http://customer-service" }
+        readinessProbe:
+          httpGet: { path: /health, port: 3000 }
+          initialDelaySeconds: 3
+        livenessProbe:
+          httpGet: { path: /health, port: 3000 }
+          initialDelaySeconds: 10
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: policy-service
+spec:
+  type: ClusterIP
+  selector: { app: policy-service }
+  ports:
+  - { port: 80, targetPort: 3000 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claim-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: claim-service }
+  template:
+    metadata:
+      labels: { app: claim-service }
+    spec:
+      containers:
+      - name: claim-service
+        image: insurance/claim-service:1.0
+        ports: [{ containerPort: 3000 }]
+        env:
+        - { name: PORT, value: "3000" }
+        - { name: POLICY_SERVICE_URL, value: "http://policy-service" }
+        readinessProbe:
+          httpGet: { path: /health, port: 3000 }
+          initialDelaySeconds: 3
+        livenessProbe:
+          httpGet: { path: /health, port: 3000 }
+          initialDelaySeconds: 10
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claim-service
+spec:
+  type: ClusterIP
+  selector: { app: claim-service }
+  ports:
+  - { port: 80, targetPort: 3000 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: api-gateway }
+  template:
+    metadata:
+      labels: { app: api-gateway }
+    spec:
+      containers:
+      - name: api-gateway
+        image: insurance/api-gateway:1.0
+        ports: [{ containerPort: 3000 }]
+        env:
+        - { name: PORT, value: "3000" }
+        - { name: CUSTOMER_SERVICE_URL, value: "http://customer-service" }
+        - { name: POLICY_SERVICE_URL, value: "http://policy-service" }
+        - { name: CLAIM_SERVICE_URL, value: "http://claim-service" }
+        readinessProbe:
+          httpGet: { path: /health, port: 3000 }
+          initialDelaySeconds: 3
+        livenessProbe:
+          httpGet: { path: /health, port: 3000 }
+          initialDelaySeconds: 10
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+spec:
+  type: LoadBalancer
+  selector: { app: api-gateway }
+  ports:
+  - { port: 80, targetPort: 3000 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: api-gateway }
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
